@@ -1,9 +1,8 @@
 # rheos-tokio-rusqlite
 
-> **Fork 声明**：本仓库是 [`rhei-tokio-rusqlite`](https://crates.io/crates/rhei-tokio-rusqlite) v2.0.0 的非官方续维护 fork（当前 2.0.1）。
-> 上游仓库 <https://github.com/ValerioL29/Rhei> 已无法访问（HTTP 404），GitHub fork 不可用，源码因此复制自
-> [docs.rs 发布包](https://docs.rs/crate/rhei-tokio-rusqlite/2.0.0/source/)（上游 commit `d473689c5`）。
-> 原作者 Valerio Liani，Apache-2.0，见 [LICENSE](LICENSE)。
+> **Fork**：[`rhei-tokio-rusqlite`](https://crates.io/crates/rhei-tokio-rusqlite) 的非官方续维护 fork ——
+> 上游 <https://github.com/ValerioL29/Rhei> 已无法访问（404），源码取自 [docs.rs 发布包](https://docs.rs/crate/rhei-tokio-rusqlite/2.0.0/source/)。
+> Apache-2.0，原作者 Valerio Liani，见 [LICENSE](LICENSE)。
 
 <p align="center">
   <a href="https://github.com/576576/rheos-tokio-rusqlite/actions"><img src="https://img.shields.io/github/actions/workflow/status/576576/rheos-tokio-rusqlite/ci.yml?branch=main&label=CI" alt="CI"></a>
@@ -20,7 +19,7 @@
 
 ```toml
 [dependencies]
-rheos-tokio-rusqlite = "2.0.1"
+rheos-tokio-rusqlite = "2.0"
 ```
 
 依赖 `rusqlite` 0.40（`bundled`，首次构建会用 `cc` 编译 SQLite，需要本机有 C 编译器）、`tokio` 1、`crossbeam-channel` 0.5。
