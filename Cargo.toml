@@ -27,6 +27,10 @@ repository.workspace = true
 homepage.workspace = true
 readme.workspace = true
 description = "Async rusqlite wrapper using dedicated thread + crossbeam channel"
+documentation = "https://docs.rs/rheos-tokio-rusqlite"
+keywords = ["sqlite", "rusqlite", "async", "tokio", "database"]
+categories = ["database", "asynchronous"]
+exclude = [".github"]
 
 [dependencies]
 rusqlite = { version = "0.40", features = ["bundled"] }
