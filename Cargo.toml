@@ -1,0 +1,37 @@
+# NOTE: this is the crate's own manifest, taken verbatim from the published crate
+# (Cargo.toml.orig). The `[workspace.*]` tables below were added so the
+# `*.workspace = true` inheritances still resolve now that the crate lives in a
+# standalone repository instead of the upstream Rhei workspace.
+
+[workspace]
+members = []
+
+[workspace.package]
+version = "2.0.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/576576/rhei-tokio-rusqlite-continue"
+homepage = "https://github.com/576576/rhei-tokio-rusqlite-continue"
+readme = "README.md"
+
+[workspace.dependencies]
+crossbeam-channel = "0.5"
+tokio = { version = "1", features = ["full"] }
+
+[package]
+name = "rhei-tokio-rusqlite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme.workspace = true
+description = "Async rusqlite wrapper using dedicated thread + crossbeam channel"
+
+[dependencies]
+rusqlite = { version = "0.39", features = ["bundled"] }
+crossbeam-channel = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
