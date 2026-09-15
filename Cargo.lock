@@ -228,7 +228,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rhei-tokio-rusqlite-continue"
+name = "rheos-tokio-rusqlite"
 version = "2.0.1"
 dependencies = [
  "crossbeam-channel",

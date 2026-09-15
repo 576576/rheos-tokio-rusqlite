@@ -1,4 +1,4 @@
-# rhei-tokio-rusqlite-continue
+# rheos-tokio-rusqlite
 
 > **Fork 声明**：本仓库是 [`rhei-tokio-rusqlite`](https://crates.io/crates/rhei-tokio-rusqlite) v2.0.0 的非官方续维护 fork（当前 2.0.1）。
 > 上游仓库 <https://github.com/ValerioL29/Rhei> 已无法访问（HTTP 404），GitHub fork 不可用，源码因此复制自
@@ -6,7 +6,7 @@
 > 原作者 Valerio Liani，Apache-2.0，见 [LICENSE](LICENSE)。
 
 <p align="center">
-  <a href="https://github.com/576576/rhei-tokio-rusqlite-continue/actions"><img src="https://img.shields.io/github/actions/workflow/status/576576/rhei-tokio-rusqlite-continue/ci.yml?branch=main&label=CI" alt="CI"></a>
+  <a href="https://github.com/576576/rheos-tokio-rusqlite/actions"><img src="https://img.shields.io/github/actions/workflow/status/576576/rheos-tokio-rusqlite/ci.yml?branch=main&label=CI" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License"></a>
   <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/edition-2021-orange" alt="Edition 2021"></a>
 </p>
@@ -20,7 +20,7 @@
 
 ```toml
 [dependencies]
-rhei-tokio-rusqlite-continue = "2.0.1"
+rheos-tokio-rusqlite = "2.0.1"
 ```
 
 依赖 `rusqlite` 0.40（`bundled`，首次构建会用 `cc` 编译 SQLite，需要本机有 C 编译器）、`tokio` 1、`crossbeam-channel` 0.5。
@@ -28,7 +28,7 @@ rhei-tokio-rusqlite-continue = "2.0.1"
 ## 快速开始
 
 ```rust
-use rhei_tokio_rusqlite::Connection;
+use rheos_tokio_rusqlite::Connection;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

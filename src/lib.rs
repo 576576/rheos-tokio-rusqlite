@@ -54,7 +54,7 @@
 //! // tokio::runtime::Runtime is available because the tokio dep enables the `rt` feature.
 //! let rt = tokio::runtime::Runtime::new().unwrap();
 //! rt.block_on(async {
-//!     let conn = rhei_tokio_rusqlite::Connection::open_in_memory().await
+//!     let conn = rheos_tokio_rusqlite::Connection::open_in_memory().await
 //!         .expect("open in-memory db");
 //!
 //!     // DDL + DML in one closure — the connection is not re-entrant, so keep
@@ -143,7 +143,7 @@ impl Connection {
     /// # rt.block_on(async {
     /// // Open an in-memory database for illustration; swap with a real path in
     /// // production (Connection::open is tested separately by the test suite).
-    /// let conn = rhei_tokio_rusqlite::Connection::open_in_memory().await.unwrap();
+    /// let conn = rheos_tokio_rusqlite::Connection::open_in_memory().await.unwrap();
     /// conn.close().await.unwrap();
     /// # });
     /// ```
@@ -230,7 +230,7 @@ impl Connection {
     /// ```rust
     /// # let rt = tokio::runtime::Runtime::new().unwrap();
     /// # rt.block_on(async {
-    /// let conn = rhei_tokio_rusqlite::Connection::open_in_memory().await.unwrap();
+    /// let conn = rheos_tokio_rusqlite::Connection::open_in_memory().await.unwrap();
     /// conn.call(|c| {
     ///     c.execute("CREATE TABLE kv (k TEXT PRIMARY KEY, v INTEGER)", [])?;
     ///     c.execute("INSERT INTO kv VALUES ('answer', 42)", [])?;

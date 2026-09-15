@@ -10,8 +10,8 @@ members = []
 version = "2.0.1"
 edition = "2021"
 license = "Apache-2.0"
-repository = "https://github.com/576576/rhei-tokio-rusqlite-continue"
-homepage = "https://github.com/576576/rhei-tokio-rusqlite-continue"
+repository = "https://github.com/576576/rheos-tokio-rusqlite"
+homepage = "https://github.com/576576/rheos-tokio-rusqlite"
 readme = "README.md"
 
 [workspace.dependencies]
@@ -19,7 +19,7 @@ crossbeam-channel = "0.5"
 tokio = { version = "1", features = ["full"] }
 
 [package]
-name = "rhei-tokio-rusqlite-continue"
+name = "rheos-tokio-rusqlite"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -27,13 +27,6 @@ repository.workspace = true
 homepage.workspace = true
 readme.workspace = true
 description = "Async rusqlite wrapper using dedicated thread + crossbeam channel"
-
-# The crate (package) is renamed, but the *lib* keeps the upstream name so this
-# fork is a drop-in replacement: downstream code keeps using
-# `use rhei_tokio_rusqlite::…` and only the Cargo.toml dependency changes.
-[lib]
-name = "rhei_tokio_rusqlite"
-path = "src/lib.rs"
 
 [dependencies]
 rusqlite = { version = "0.40", features = ["bundled"] }

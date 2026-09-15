@@ -14,7 +14,7 @@ use std::fmt;
 /// ```rust
 /// # let rt = tokio::runtime::Runtime::new().unwrap();
 /// # rt.block_on(async {
-/// let conn = rhei_tokio_rusqlite::Connection::open_in_memory().await.unwrap();
+/// let conn = rheos_tokio_rusqlite::Connection::open_in_memory().await.unwrap();
 /// let n: i64 = conn.call(|c| {
 ///     // rusqlite::Error is converted to Error::Rusqlite via From impl
 ///     c.query_row("SELECT 1 + 1", [], |r| r.get(0)).map_err(Into::into)
