@@ -12,361 +12,163 @@
 > **代码来源：** docs.rs 构建该版本文档所使用的发布包 ——
 > <https://docs.rs/crate/rhei-tokio-rusqlite/2.0.0/source/>，
 > 对应上游 commit [`d473689c50e718ce60097777773df045cfd1cc04`](https://github.com/ValerioL29/Rhei/tree/d473689c50e718ce60097777773df045cfd1cc04)，
-> VCS 路径 `crates/rhei-tokio-rusqlite`。`src/lib.rs`、`src/error.rs` 未作任何功能性改动。
+> VCS 路径 `crates/rhei-tokio-rusqlite`。
+>
+> **相对上游的改动（仅此三项）：**
+>
+> 1. **改名**：package 名 `rhei-tokio-rusqlite` → `rhei-tokio-rusqlite-continue`（避免与 crates.io 上已存在的上游版本撞名）。
+>    lib 名仍为 `rhei_tokio_rusqlite`，因此是 **drop-in 替换**，下游代码里的 `use rhei_tokio_rusqlite::…` 不用动。
+> 2. **脱离原工作区**：补回 `[workspace]` / `[workspace.package]` / `[workspace.dependencies]` 表
+>    （上游位于 Rhei 工作区内，这些字段原本由根 `Cargo.toml` 提供），并把 `repository` / `homepage` 指向本仓库。
+> 3. **依赖升级**：`rusqlite` 0.39 → **0.40**，并更新 `Cargo.lock`（tokio 1.50 → 1.53，crossbeam-channel 0.5.15 → 0.5.17）。
+>    `src/lib.rs`、`src/error.rs` **未作任何改动**，5 个单元测试 + 4 个文档测试全部通过。
 >
 > **归属与许可：** 原始代码的著作权归原作者 **Valerio Liani** 及 Rhei 贡献者所有，以 **Apache-2.0** 许可发布
 > （见 [LICENSE](LICENSE)）。本仓库不主张对原作品的所有权，仅作存档与继续维护之用；
 > 上游恢复访问后，欢迎合并、重定向或归档本仓库。
->
-> **本仓库相对上游的唯一改动：** 为让 crate 脱离原工作区独立构建，在 `Cargo.toml` 中补回了
-> `[workspace]` / `[workspace.package]` / `[workspace.dependencies]` 表（上游位于工作区内，这些字段由根 `Cargo.toml` 提供），
-> 并把 `repository` / `homepage` 指向本仓库。库代码本身零改动。
->
-> 以下为原 README 原文（内容面向 Rhei 整个工作区），未作删改。
 
 ---
 
 <p align="center">
-  <img src="assets/full-white.png" alt="Rhei" width="320">
+  <em>Async rusqlite wrapper using a dedicated OS thread + crossbeam channel</em>
 </p>
 
 <p align="center">
-  <em>Lightweight, serverless Hybrid Transactional/Analytical Processing in Rust</em>
-</p>
-
-<p align="center">
-  <a href="https://github.com/ValerioL29/Rhei/actions"><img src="https://img.shields.io/github/actions/workflow/status/ValerioL29/Rhei/ci.yml?branch=main&label=CI" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License"></a>
-  <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-1.91%2B-orange" alt="Rust"></a>
-  <a href="https://arrow.apache.org"><img src="https://img.shields.io/badge/Arrow-58-green" alt="Arrow"></a>
+  <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/edition-2021-orange" alt="Edition 2021"></a>
+  <a href="https://docs.rs/rusqlite"><img src="https://img.shields.io/badge/rusqlite-0.40-blue" alt="rusqlite 0.40"></a>
 </p>
 
-<p align="center">
-  <a href="README_CN.md">中文</a>
-</p>
+> **关于本文**：上游 crate 携带的 README 其实是 **Rhei 整个工作区**的说明（HTAP 引擎、DataFusion/DuckDB、
+> Python 绑定、CLI、Arrow Flight SQL……），与本 crate 无关，且其中引用的 `assets/full-white.png`、`README_CN.md`、
+> `E2E_TEST_REPORT.md` 等资源并不随 crate 发布（链接全部失效）。本 README 已重写为**只描述本 crate**，
+> 需要了解上游整体项目请看 <https://docs.rs/crate/rhei-tokio-rusqlite/2.0.0/source/> 中的原始文件。
 
----
+## 这是什么
 
-Rhei pairs **Rusqlite** (OLTP) with a pluggable OLAP layer (**DataFusion** or **DuckDB**), connected by trigger-based CDC replication and automatic SQL query routing. It can also operate as a **sidecar DBMS**, following an external database (SQLite, PostgreSQL) via timestamp-based CDC and maintaining temporal (SCD Type 2) history for point-in-time queries.
+`rusqlite` 是同步 API —— 每次调用都会阻塞当前线程。直接在 Tokio 任务里跑会卡住 async executor；
+常规解法 `spawn_blocking` 则是每次调用都从线程池取一个线程，有额外的调度开销。
 
-**Highlights:**
-- Zero-config HTAP: writes go to OLTP, analytical queries auto-route to OLAP
-- CDC-powered sync with background replication and pruning
-- Sidecar mode: attach to any SQLite/PostgreSQL as a read-only analytical mirror
-- Arrow Flight SQL server for network-accessible OLAP queries (ADBC/JDBC/DBeaver)
-- Python bindings via PyO3 (fully async, asyncio + anyio)
-- CLI tool (`rh`) with interactive REPL, live TUI dashboard, and headless service mode
-- Docker-ready: multi-stage Dockerfile, 66MB optimized binary
+本 crate 换了个思路：**为整条 connection 独占一个 OS 线程**。调用方通过 `Sender<Message>`
+（crossbeam 无界通道）投递闭包，结果经 `oneshot::Receiver<T>` 回传。因为线程是长期存活的，
+既没有每次调用的建线程成本，`rusqlite::Connection` 也永远不会跨线程移动。
 
-## Performance
+## 安装
 
-<table>
-<tr><td>
-
-**Rust API** (release mode, LTO)
-
-| Operation | DataFusion | DuckDB |
-|-----------|-----------|--------|
-| Insert 700 rows | 10,267/s | 8,797/s |
-| CDC sync | 141,326 evt/s | 43,579 evt/s |
-| CRUD 225 ops | 12,072/s | 13,998/s |
-| Concurrent 8x50 | 10,654/s | 14,779/s |
-
-</td><td>
-
-**Python API** (asyncio via PyO3)
-
-| Operation | Throughput |
-|-----------|-----------|
-| Insert 500 rows | 2,491/s |
-| CDC sync | 32,142 evt/s |
-| Batch 400 rows | 30,733/s |
-
-</td></tr>
-<tr><td>
-
-**Sidecar** (DataFusion temporal, InMemory baseline)
-
-| Metric | Value |
-|--------|-------|
-| INSERT sync p50 (10 rows/cycle) | 228us |
-| INSERT sync p99 (10 rows/cycle) | 943us |
-| Initial sync @ 10K rows | 488K evt/s |
-| Initial sync @ 100K rows | 466K evt/s |
-
-</td><td>
-
-**FlightSQL** (100K rows, streaming + zstd)
-
-| Query type | Local | Network | Overhead |
-|------------|-------|---------|----------|
-| Full scan | 1,713 q/s | 67 q/s | 26x |
-| Filtered | 466 q/s | 181 q/s | 2.6x |
-| GROUP BY | 261 q/s | 23 q/s | 11x |
-
-</td></tr>
-</table>
-
-**Vortex storage cross-mode** — the durability dial (v2.0, 50-cycle steady-state sync, 10 rows/cycle):
-
-| Storage mode | sync p50 | sync p99 | Initial @ 100K |
-|---|---:|---:|---:|
-| `InMemory` (volatile) | 308 µs | 699 µs | 387K rows/s |
-| `Vortex` local (durable) | 5.5 ms | 7.2 ms | 473K rows/s |
-| `Vortex` S3-compatible (durable + distributed) | 209 ms | 437 ms | 186K rows/s |
-
-See [`E2E_TEST_REPORT.md`](E2E_TEST_REPORT.md) for the full v2.0 methodology and the Postgres-source numbers.
-
-## Architecture
-
-```
-                              Standard HTAP Mode
-                              ==================
-
-Client ──> HtapEngine (facade)
-              |
-              |-- SqlParserRouter ──> AST-based routing (OLTP or OLAP)
-              |
-              |-- RusqliteEngine (OLTP)
-              |     |-- Write connection (dedicated thread + crossbeam channel)
-              |     |-- Read pool (round-robin, WAL mode)
-              |     +-- CDC triggers ──> _rhei_cdc_log (json_array)
-              |
-              |-- OlapBackend
-              |     |-- DataFusion (pure Rust, async, InMemory / Vortex { url })
-              |     +-- DuckDB (C++ via FFI, MVCC concurrent reads)
-              |
-              +-- CdcSyncEngine
-                    |-- Background sync loop (configurable interval)
-                    |-- Batch INSERT grouping + CDC pruning
-                    +-- Destructive (mirror) or Temporal (SCD Type 2)
-
-
-                              Sidecar Mode
-                              ============
-
-External DB (SQLite / PostgreSQL)
-  |  polls by updated_at > watermark
-  v
-TimestampCdcConsumer ──> CdcSyncEngine ──> OlapBackend
-  |                                           |
-  +-- INSERT/UPDATE/DELETE heuristics         +-- Point-in-time queries
-  +-- Soft-delete detection                       via _rhei_valid_from/_rhei_valid_to
+```toml
+[dependencies]
+rhei-tokio-rusqlite-continue = "2.0"
 ```
 
-## Quick Start
+**从上游迁移（drop-in）：**
 
-### Rust
+```toml
+# 之前
+rhei-tokio-rusqlite = "2.0"
+# 之后
+rhei-tokio-rusqlite-continue = "2.0"
+```
+
+代码无需改动 —— 本 fork 保留了上游的 lib 名 `rhei_tokio_rusqlite`，所以 `use rhei_tokio_rusqlite::Connection;`
+照旧可用。
+
+## 快速开始
 
 ```rust
-use std::sync::Arc;
-use arrow::datatypes::{DataType, Field, Schema};
-use rhei::{HtapConfig, HtapEngine, TableSchema};
+use rhei_tokio_rusqlite::Connection;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let engine = HtapEngine::new(HtapConfig {
-        oltp_path: "my.db".to_string(),
-        ..Default::default()
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let conn = Connection::open_in_memory().await?;
+
+    // DDL + DML 放在同一个闭包里：connection 不可重入，
+    // 事务横跨多个 call() 会死锁。
+    conn.call(|c| {
+        c.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)", [])?;
+        c.execute("INSERT INTO users (name) VALUES (?1)", ["Alice"])?;
+        c.execute("INSERT INTO users (name) VALUES (?1)", ["Bob"])?;
+        Ok(())
     }).await?;
 
-    engine.execute("CREATE TABLE orders (id INTEGER PRIMARY KEY, total INTEGER)", &[]).await?;
-    engine.register_table(TableSchema::new(
-        "orders",
-        Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Int64, false),
-            Field::new("total", DataType::Int64, true),
-        ])),
-        vec!["id".to_string()],
-    )).await?;
+    let count: i64 = conn.call(|c| {
+        c.query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))
+            .map_err(Into::into)
+    }).await?;
 
-    engine.execute("INSERT INTO orders VALUES (1, 99)", &[]).await?;
-    engine.sync_now().await?;
+    assert_eq!(count, 2);
 
-    // Analytical query auto-routes to OLAP
-    let batches = engine.query("SELECT SUM(total) FROM orders").await?;
+    conn.close().await?;
     Ok(())
 }
 ```
 
-### Python
+## 线程模型
 
-```python
-import anyio
-import rhei
-
-async def main():
-    async with await rhei.open(oltp_path="my.db") as engine:
-        await engine.execute("CREATE TABLE orders (id INTEGER PRIMARY KEY, total INTEGER)")
-        await engine.register_table(
-            rhei.TableSchema("orders", [("id", "int64"), ("total", "int64")], ["id"])
-        )
-        await engine.execute("INSERT INTO orders VALUES (1, 99)")
-        await engine.sync_now()
-        batches = await engine.query("SELECT SUM(total) FROM orders")
-
-anyio.run(main)
+```text
+async caller
+  │  conn.call(|c| { … })
+  │
+  ▼
+Sender<Message>  ──crossbeam channel──►  background OS thread
+                                              │ rusqlite::Connection
+                                              │ executes closure
+                                              ▼
+oneshot::Receiver<R>  ◄── tokio oneshot ──  result
 ```
 
-### CLI (`rh`)
+- `Connection` 是廉价可 `Clone` 的句柄：所有克隆共享同一个 channel、同一个后台线程。
+- 因此并发调用是**安全的，但不是并行的** —— 它们会在 channel 上排队。
+  考虑到 SQLite 自身的串行化语义，这通常正合适；多克隆并发时建议开启 WAL。
+- 丢弃最后一个克隆即断开 channel，后台线程退出事件循环，`rusqlite::Connection` 被干净地 drop。
+  需要拿到显式的关闭结果（以及关闭错误）时，改用 `Connection::close()`。
+
+## 与 `tokio-rusqlite` 的差异
+
+[`tokio-rusqlite`](https://docs.rs/tokio-rusqlite) 使用 `spawn_blocking`（每次调用从线程池取一个线程）。
+本 crate 把一个 `std::thread` 永久绑定到一个 `rusqlite::Connection`，对于大量短小连续调用的场景更划算
+（没有线程池churn），并且保证 SQLite 的 `PRAGMA` / `BEGIN` / `COMMIT` 会话状态不会在别的线程上被观察到。
+
+## API
+
+| 方法 | 说明 |
+|------|------|
+| `Connection::open(path)` | 打开文件型数据库，立即派生后台线程；仅在成功打开（或返回错误）后返回 |
+| `Connection::open_in_memory()` | 打开私有内存库，适合测试与临时数据 |
+| `Connection::call(f)` | 在后台线程上执行闭包 `FnOnce(&mut rusqlite::Connection) -> Result<R, Error>` 并等待结果 |
+| `Connection::close()` | 显式关闭并等待后台线程确认，返回关闭期间的错误 |
+
+闭包必须是 `Send + 'static`（按值捕获，用 `move |c| { … }`），且应尽量短小 —— 它持有整条 connection。
+
+## 错误处理
+
+所有可能失败的操作都返回 `Error`：
+
+| 变体 | 含义 |
+|------|------|
+| `Error::Rusqlite(rusqlite::Error)` | rusqlite 层错误（SQL 语法、约束冲突、I/O 等），最常见 |
+| `Error::ConnectionClosed` | 后台线程已停止（调用过 `close()`，或所有发送端在派发前已 drop） |
+| `Error::Close(rusqlite::Error)` | `rusqlite::Connection::close` 在显式关闭时报错 |
+| `Error::Other(String)` | 闭包内自定义的错误信息 |
+
+`Error` 实现了 `From<rusqlite::Error>`，所以传给 `call` 的闭包里可以直接对 rusqlite 方法用 `?`。
+
+## 依赖
+
+| Crate | 版本 | 说明 |
+|-------|------|------|
+| `rusqlite` | `0.40`（feature `bundled`） | 编译并静态链接 SQLite，`libsqlite3-sys` 0.38.2 |
+| `tokio` | `1`（feature `full`） | 仅用到 `sync::oneshot`；`full` 是上游设定，实际可按需收窄 |
+| `crossbeam-channel` | `0.5` | 无界通道，用于向后台线程投递闭包 |
+
+## 测试
 
 ```bash
-cargo build -p rhei-tui --release   # binary: rh
-
-rh exec --db my.db "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)"
-rh exec --db my.db "INSERT INTO users VALUES (1, 'Alice')"
-rh query --db my.db "SELECT COUNT(*) FROM users"    # OLAP read-only
-rh repl --db my.db                                   # interactive REPL
-rh dashboard                                          # live TUI
+cargo test          # 5 个单元测试 + 4 个文档测试
 ```
 
-### Docker
-
-```bash
-docker build -t rhei .
-docker run --rm rhei info
-docker run --rm -v ./config/htap.toml:/etc/rhei/config.toml rhei
-```
-
-### Service Mode
-
-```bash
-rh serve --config config/htap.toml             # TUI dashboard + background sync
-rh serve --config config/htap.toml --headless  # stdout logging (Docker/systemd)
-```
-
-## Features
-
-| Feature | Default | Description |
-|---------|---------|-------------|
-| `datafusion-backend` | Yes | DataFusion OLAP engine (pure Rust, async) |
-| `duckdb-backend` | No | DuckDB OLAP engine (C++, bundled build) |
-| `full` | No | Both OLAP backends |
-| `sidecar` | No | Timestamp-based CDC from external DBs (SQLite + PostgreSQL), incl. RocksDB-persistent watermarks |
-| `flight-sql` | No | Arrow Flight SQL gRPC server for OLAP queries (bearer-token auth optional) |
-| `rocksdb-cdc` | No | RocksDB-backed CDC log / bridge (5-7× faster writes, crash-durable trigger → sync pipeline) |
-| `metrics` | No | Counters/gauges via the `metrics` crate facade |
-| `metrics-exporter` | No | Prometheus HTTP metrics endpoint on `rhei-tui` |
-| `cloud-storage` | No | S3-compatible object-store backend for DataFusion Vortex storage (`s3://` URL scheme). Local Vortex paths work without this feature. GCS is not supported in v2.0 — use an S3-compatibility shim (e.g. MinIO over `gcsfuse`) and set `AWS_ENDPOINT_URL`. |
-
-```bash
-cargo build                                        # DataFusion only (default, smallest)
-cargo build --features duckdb-backend              # + DuckDB
-cargo build --features sidecar                     # + sidecar (SQLite + PostgreSQL)
-cargo build --features flight-sql                  # + Arrow Flight SQL server
-cargo build --features "full,sidecar,flight-sql"   # everything
-```
-
-## API Reference
-
-| Method | Description |
-|--------|-------------|
-| `HtapEngine::new(config)` | Create engine (auto-starts sync if `sync_interval` set) |
-| `execute(sql, params)` | Write to OLTP (errors in pure sidecar mode) |
-| `execute_batch(stmts)` | Multi-statement transaction (much faster) |
-| `query(sql)` | Auto-routed: OLTP for point reads, OLAP for analytics |
-| `query_with_hint(sql, hint)` | Force OLTP or OLAP routing |
-| `register_table(schema)` | Register for replication (CDC triggers + OLAP mirror) |
-| `sync_now()` | Single CDC sync cycle |
-| `start_sync(interval)` / `stop_sync()` | Background sync loop |
-| `initial_sync(table)` / `initial_sync_all()` | Bulk-load OLTP rows to OLAP |
-| `add_column(table, col, type)` | Schema evolution: registry + OLAP + triggers |
-| `drop_column(table, col)` | Schema evolution: teardown triggers + ALTER |
-| `sync_status()` | CDC lag, last synced seq, running state |
-| `oltp()` / `olap()` | Direct engine access |
-
-## Sidecar Mode
-
-Attach to an external database as a read-only analytical mirror with full temporal history:
-
-```rust
-let config = HtapConfig {
-    sync_mode: SyncMode::Temporal,
-    sidecar: Some(SidecarConfig {
-        source_path: "external.db".to_string(),
-        enable_local_oltp: false,
-        timestamp_config: TimestampCdcConfig { /* ... */ },
-    }),
-    ..Default::default()
-};
-let engine = HtapEngine::new(config).await?;
-
-// Time-travel query: "What was order 42 at time T?"
-let batches = engine.query(
-    "SELECT * FROM orders
-     WHERE id = 42
-       AND _rhei_valid_from <= 1700000000
-       AND (_rhei_valid_to IS NULL OR _rhei_valid_to > 1700000000)"
-).await?;
-```
-
-## Arrow Flight SQL
-
-With `--features flight-sql`, Rhei exposes OLAP queries over gRPC using the [Arrow Flight SQL](https://arrow.apache.org/docs/format/FlightSql.html) protocol. Queries stream directly from the OLAP engine (via `query_stream()`) with zstd compression — no buffering of full results in memory.
-
-```toml
-# config/htap.toml
-[engine]
-flight_port = 50051
-```
-
-```python
-# Python client (ADBC)
-import adbc_driver_flightsql.dbapi as flight_sql
-
-conn = flight_sql.connect("grpc://localhost:50051")
-cursor = conn.cursor()
-cursor.execute("SELECT category, SUM(amount) FROM orders GROUP BY category")
-table = cursor.fetch_arrow_table()
-```
-
-Compatible with: Python (`adbc_driver_flightsql`), Java (Arrow Flight JDBC), DBeaver, Go (`adbc/driver/flightsql`).
-
-Features: streaming execution, zstd/lz4 compression, deferred query execution (no double-execute), read-only (OLAP only).
-
-## Testing
-
-```bash
-cargo test --workspace                                  # DataFusion + unit tests
-cargo test --workspace --all-features                   # All 251 Rust tests (v2.0)
-cargo test -p rhei-flight --all-features                # 22 FlightSQL tests (inc. bearer-token auth)
-uv run pytest -v                                        # 54 Python tests (v2.0)
-RHEI_TEST_FLIGHT=1 uv run pytest python/tests/test_flight_sql.py -v  # FlightSQL Python tests (gated)
-```
-
-See [E2E_TESTING_SOP.md](E2E_TESTING_SOP.md) for the full testing procedure and [E2E_TEST_REPORT.md](E2E_TEST_REPORT.md) for the latest v2.0 numbers.
-
-## Workspace Crates
-
-| Crate | Description |
-|-------|-------------|
-| `rhei` | Facade: HtapEngine, HtapConfig, integration tests |
-| `rhei-core` | Traits (OlapEngine, OltpEngine, CdcConsumer), types, SchemaRegistry |
-| `rhei-tokio-rusqlite` | Async rusqlite wrapper (dedicated thread + crossbeam) |
-| `rhei-oltp-rusqlite` | Rusqlite OLTP: write conn + read pool + CDC producer |
-| `rhei-olap` | Backend-agnostic OLAP dispatcher (OlapBackend enum) |
-| `rhei-datafusion` | DataFusion engine (InMemory / Vortex { url } — local + S3-compatible) |
-| `rhei-duckdb` | DuckDB engine (write conn + read pool, MVCC) |
-| `rhei-sync` | CdcSyncEngine, SqlParserRouter, CDC-to-DML converter |
-| `rhei-cdc-rocksdb` | RocksDB-backed CDC log (durable, 5-7x faster) |
-| `rhei-sidecar` | TimestampCdcConsumer (SQLite + PostgreSQL) |
-| `rhei-flight` | Arrow Flight SQL gRPC server (streaming + zstd) |
-| `rhei-tui` | CLI tool (`rh`) + TUI dashboard |
-
-## Citation
-
-If you use Rhei in your research, please cite it as:
-
-```bibtex
-@software{rhei2025,
-  author       = {Valerio Liani},
-  title        = {{Rhei}: Lightweight Serverless Hybrid Transactional/Analytical Processing in Rust},
-  year         = {2025},
-  url          = {https://github.com/ValerioL29/Rhei},
-  note         = {Apache-2.0 License},
-}
-```
+`rusqlite` 的 `bundled` feature 会在首次构建时用 `cc` 编译 SQLite，需要本机有 C 编译器。
 
 ## License
 
-Apache-2.0
+Apache-2.0。原始代码著作权归 **Valerio Liani**（<https://github.com/ValerioL29/Rhei>）及 Rhei 贡献者所有，
+详见 [LICENSE](LICENSE)。

@@ -51,7 +51,7 @@
 //! # Example
 //!
 //! ```rust
-//! // tokio::runtime::Runtime is available because the workspace tokio dep includes `rt`.
+//! // tokio::runtime::Runtime is available because the tokio dep enables the `rt` feature.
 //! let rt = tokio::runtime::Runtime::new().unwrap();
 //! rt.block_on(async {
 //!     let conn = rhei_tokio_rusqlite::Connection::open_in_memory().await
